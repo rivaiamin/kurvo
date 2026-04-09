@@ -4,19 +4,20 @@ import paper from 'paper';
 import { useEditor } from '../context/EditorContext';
 
 export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
-  const { activeTool, currentColor, isAnimating, projectRef, setCurrentColor } = useEditor();
+  const { activeTool, currentColor, isAnimating, brushSize, projectRef, setCurrentColor, saveHistory, initHistory } = useEditor();
 
-  const stateRef = useRef({ activeTool, currentColor, isAnimating });
+  const stateRef = useRef({ activeTool, currentColor, isAnimating, brushSize });
   
   useEffect(() => {
-    stateRef.current = { activeTool, currentColor, isAnimating };
-  }, [activeTool, currentColor, isAnimating]);
+    stateRef.current = { activeTool, currentColor, isAnimating, brushSize };
+  }, [activeTool, currentColor, isAnimating, brushSize]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
     
     paper.setup(canvasRef.current);
     projectRef.current = paper.project;
+    initHistory();
 
     const tool = new paper.Tool();
     let transformBox: paper.Group | null = null;
@@ -25,11 +26,24 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
     const currentGroupRef = { current: null as paper.Group | null };
     const activeSelectionRef = { current: null as paper.Group | null };
 
+    // Hover Indicator
+    let hoverIndicator = new paper.Path.Circle({
+        center: [-1000, -1000], 
+        radius: 6, 
+        strokeColor: '#3b82f6', 
+        strokeWidth: 2,
+        unselectable: true,
+        opacity: 0
+    });
+    hoverIndicator.data = { isHoverNode: true };
+
     // Drag tracking state
     let draggedSegment: paper.Segment | null = null;
     let dragStartPressure = 1;
     let dragStartX = 0;
     let lastClickTime = 0;
+
+    let editsMade = false;
 
     const updateRibbon = (group: paper.Group) => {
         const skeleton = group.children['skeleton'] as paper.Path;
@@ -133,6 +147,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
         const mode = stateRef.current.activeTool;
         const color = stateRef.current.currentColor;
+        const brushSize = stateRef.current.brushSize;
 
         const now = Date.now();
         const isDoubleClick = (now - lastClickTime < 300);
@@ -142,7 +157,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
             if (!currentGroupRef.current) {
                 const group = new paper.Group({ data: { isStroke: true } });
                 const skeleton = new paper.Path({ name: 'skeleton', strokeColor: '#000000', opacity: 0.01, selected: true });
-                skeleton.data = { baseWidth: 4 };
+                skeleton.data = { baseWidth: brushSize }; // Adopt slider's base size
 
                 const ribbon = new paper.Path({ name: 'ribbon', fillColor: color, closed: true });
                 const capStart = new paper.Path.Circle({ center: [0, 0], radius: 1, fillColor: color, name: 'capStart', applyMatrix: false });
@@ -164,6 +179,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
             skel.smooth({ type: 'catmull-rom', factor: 0.5 });
             updateRibbon(currentGroupRef.current);
+            editsMade = true;
         }
 
         if (mode === 'edit' || mode === 'pressure' || mode === 'select') {
@@ -185,7 +201,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
                 }
             }
 
-            if (hitResult) {
+            if (hitResult && hitResult.item !== hoverIndicator) {
                 let group = hitResult.item.parent as paper.Group;
                 if (!group || !group.data?.isStroke) group = hitResult.item as paper.Group;
 
@@ -209,6 +225,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
                                 skel.smooth({ type: 'catmull-rom', factor: 0.5 });
                                 updateRibbon(group);
                                 draggedSegment = null;
+                                editsMade = true;
                             } else {
                                 draggedSegment = hitResult.segment;
                                 dragStartPressure = hitResult.segment.data?.pressure ?? 1;
@@ -227,6 +244,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
                                 draggedSegment = newSeg;
                                 dragStartPressure = newSeg.data.pressure;
                                 dragStartX = event.point.x;
+                                editsMade = true;
                             }
                         }
                     }
@@ -234,6 +252,41 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
             } else {
                 clearPaperSelection();
             }
+        }
+    };
+
+    tool.onMouseMove = (event: paper.ToolEvent) => {
+        if (stateRef.current.isAnimating) return;
+        const mode = stateRef.current.activeTool;
+
+        if (mode === 'edit' || mode === 'pressure' || mode === 'select') {
+            const hitOptions = { segments: true, stroke: true, fill: true, tolerance: 6 };
+            const hitResult = paper.project.hitTest(event.point, hitOptions);
+
+            if (hitResult && hitResult.item !== hoverIndicator) {
+                if (mode === 'select' && hitResult.item.data && hitResult.item.data.isHandle) {
+                    canvasRef.current!.style.cursor = 'crosshair';
+                    hoverIndicator.opacity = 0;
+                } else if (mode === 'select' && hitResult.item.parent?.data?.isTransformBox) {
+                    canvasRef.current!.style.cursor = 'grab';
+                    hoverIndicator.opacity = 0;
+                } else if ((mode === 'edit' || mode === 'pressure') && hitResult.type === 'segment' && hitResult.item.name === 'skeleton') {
+                    canvasRef.current!.style.cursor = 'crosshair';
+                    // Show hover ring enlargement on the specific segment node
+                    if (paper.project.layers.length > 0) hoverIndicator.bringToFront();
+                    hoverIndicator.position = hitResult.segment.point;
+                    hoverIndicator.opacity = 1;
+                } else {
+                     canvasRef.current!.style.cursor = 'pointer';
+                     hoverIndicator.opacity = 0;
+                }
+            } else {
+                 canvasRef.current!.style.cursor = 'default';
+                 hoverIndicator.opacity = 0;
+            }
+        } else {
+             canvasRef.current!.style.cursor = 'crosshair';
+             hoverIndicator.opacity = 0;
         }
     };
 
@@ -251,6 +304,8 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
             draggedSegment.point = draggedSegment.point.add(event.delta);
             (draggedSegment.path as paper.Path).smooth({ type: 'catmull-rom', factor: 0.5 });
             updateRibbon(draggedSegment.path.parent as paper.Group);
+            editsMade = true;
+            if (hoverIndicator.opacity === 1) hoverIndicator.position = draggedSegment.point;
         }
 
         if (mode === 'pressure' && draggedSegment) {
@@ -258,6 +313,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
             if (!draggedSegment.data) draggedSegment.data = {};
             draggedSegment.data.pressure = Math.max(0.05, dragStartPressure + dx * 0.015);
             updateRibbon(draggedSegment.path.parent as paper.Group);
+            editsMade = true;
         }
 
         if (mode === 'select' && activeSelectionRef.current && transformAction) {
@@ -287,12 +343,19 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
                 group.rotate(endVec.angle - startVec.angle, center);
             }
             drawTransformBox(group);
+            editsMade = true;
         }
     };
 
     tool.onMouseUp = () => {
         draggedSegment = null;
         transformAction = null;
+        
+        // Push to History stack if edits occurred before lifting the tool
+        if (editsMade) {
+            saveHistory();
+            editsMade = false;
+        }
     };
 
     tool.onKeyUp = (event: paper.KeyEvent) => {
@@ -308,6 +371,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
             if (activeSelectionRef.current) {
                 activeSelectionRef.current.remove();
                 clearPaperSelection();
+                saveHistory();
             }
         }
     };
@@ -344,5 +408,5 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
             paper.project.clear();
         }
     };
-  }, []);
+  }, []); // Note that initHistory + saveHistory use empty deps strictly.
 }

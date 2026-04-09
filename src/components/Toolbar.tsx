@@ -1,21 +1,22 @@
 // @ts-nocheck
 import React from 'react';
 import { useEditor } from '../context/EditorContext';
-import { Code, Download, Focus, Maximize2, MousePointer2, Move, Palette, PenTool, Play, Square, Trash2 } from 'lucide-react';
+import { Code, Download, Focus, Maximize2, MousePointer2, Move, Palette, PenTool, Play, Square, Trash2, Undo, Redo } from 'lucide-react';
 import type { ToolMode } from '../types';
 
 export function Toolbar() {
   const { 
     activeTool, setActiveTool, 
     currentColor, setCurrentColor, 
+    brushSize, setBrushSize,
     isAnimating, setIsAnimating, 
-    setAnimatedPaths, projectRef, resetView
+    setAnimatedPaths, projectRef, resetView,
+    undo, redo, canUndo, canRedo
   } = useEditor();
 
   const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const color = e.target.value;
     setCurrentColor(color);
-    // Find active selection and apply color if any exists
     if (projectRef.current) {
         const skeletons = projectRef.current.getItems({ name: 'skeleton', selected: true });
         skeletons.forEach(skel => {
@@ -147,8 +148,25 @@ export function Toolbar() {
             </div>
 
             <div className={`flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-md border ${isAnimating ? 'opacity-50 pointer-events-none' : ''}`}>
+                <button onClick={undo} className={`p-1 transition-colors ${canUndo ? 'text-slate-700 hover:text-indigo-600' : 'text-slate-300 pointer-events-none'}`} title="Undo (Ctrl+Z)"><Undo size={16} /></button>
+                <button onClick={redo} className={`p-1 transition-colors ${canRedo ? 'text-slate-700 hover:text-indigo-600' : 'text-slate-300 pointer-events-none'}`} title="Redo (Ctrl+Shift+Z)"><Redo size={16} /></button>
+            </div>
+
+            <div className={`flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-md border ${isAnimating ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Palette size={16} className="text-slate-500" />
                 <input type="color" value={currentColor} onChange={handleColorChange} className="w-6 h-6 p-0 border-0 bg-transparent cursor-pointer rounded-full" />
+                
+                <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                
+                <span className="text-xs font-semibold text-slate-500 w-4 text-center">{brushSize}</span>
+                <input 
+                    type="range" 
+                    min="1" max="25" 
+                    value={brushSize} 
+                    onChange={(e) => setBrushSize(parseInt(e.target.value))} 
+                    className="w-24 cursor-pointer accent-indigo-600"
+                    title="Base Brush Size"
+                />
             </div>
 
             <button onClick={resetView} className="px-3 py-1.5 bg-slate-100 rounded-md border text-slate-500 hover:text-indigo-600 hover:bg-white transition-all flex items-center gap-2 text-sm font-medium" title="Reset Zoom/Pan">
