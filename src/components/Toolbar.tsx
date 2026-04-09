@@ -17,16 +17,19 @@ export function Toolbar() {
   const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const color = e.target.value;
     setCurrentColor(color);
-    if (projectRef.current) {
-      const skeletons = projectRef.current.getItems({ name: 'skeleton', selected: true });
-      skeletons.forEach(skel => {
-        if (skel.parent && skel.parent.data?.isStroke) {
-          (skel.parent.children['ribbon'] as paper.Path).fillColor = new projectRef.current!.paper.Color(color);
-          (skel.parent.children['capStart'] as paper.Path).fillColor = new projectRef.current!.paper.Color(color);
-          (skel.parent.children['capEnd'] as paper.Path).fillColor = new projectRef.current!.paper.Color(color);
-        }
-      });
-    }
+    if (!projectRef.current) return;
+    const paperColor = new projectRef.current.paper.Color(color);
+    const groups = new Set<paper.Group>();
+    projectRef.current.getItems({ name: 'skeleton', selected: true }).forEach((skel) => {
+      if (skel.parent?.data?.isStroke) groups.add(skel.parent as paper.Group);
+    });
+    const active = (window as any).getActiveStrokeGroup?.();
+    if (active?.data?.isStroke) groups.add(active);
+    groups.forEach((group) => {
+      (group.children['ribbon'] as paper.Path).fillColor = paperColor;
+      (group.children['capStart'] as paper.Path).fillColor = paperColor;
+      (group.children['capEnd'] as paper.Path).fillColor = paperColor;
+    });
   };
 
   const switchTool = (tool: ToolMode) => {

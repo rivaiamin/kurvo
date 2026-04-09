@@ -104,6 +104,8 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         activeSelectionRef.current = null;
     };
     (window as any).clearPaperSelection = clearPaperSelection;
+    /** Stroke group currently shown with the transform box in Select mode (skeleton may not be `selected`). */
+    (window as any).getActiveStrokeGroup = () => activeSelectionRef.current;
 
     const drawTransformBox = (group: paper.Group) => {
         if (transformBox) transformBox.remove();
@@ -438,6 +440,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
     canvasRef.current.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
+        delete (window as any).getActiveStrokeGroup;
         if (canvasRef.current) {
             canvasRef.current.removeEventListener('wheel', handleWheel);
         }
