@@ -154,7 +154,13 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         lastClickTime = now;
 
         if (mode === 'draw') {
-            if (!currentGroupRef.current) {
+            if (isDoubleClick) {
+                currentGroupRef.current = null;
+                clearPaperSelection();
+                return;
+            }
+
+            if (!currentGroupRef.current || !currentGroupRef.current.parent) {
                 const group = new paper.Group({ data: { isStroke: true } });
                 const skeleton = new paper.Path({ name: 'skeleton', strokeColor: '#000000', opacity: 0.01, selected: true });
                 skeleton.data = { baseWidth: brushSize }; // Adopt slider's base size
@@ -362,7 +368,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         if (stateRef.current.isAnimating) return;
         const mode = stateRef.current.activeTool;
 
-        if (event.key === 'enter') {
+        if (event.key === 'enter' || (!event.modifiers.control && !event.modifiers.command && (event.key === 'z' || event.key === 'Z'))) {
             currentGroupRef.current = null;
             clearPaperSelection();
         }

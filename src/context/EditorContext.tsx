@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
-import type { ToolMode, PathData } from '../types';
 import paper from 'paper';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import type { PathData, ToolMode } from '../types';
 
 interface EditorContextProps {
   activeTool: ToolMode;
@@ -31,10 +31,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [brushSize, setBrushSize] = useState<number>(4);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [animatedPaths, setAnimatedPaths] = useState<PathData[]>([]);
-  
+
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
-  
+
   const projectRef = useRef<paper.Project | null>(null);
 
   const stateRefs = useRef({ undoStack, redoStack });
@@ -53,21 +53,21 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const initHistory = useCallback(() => {
     // Save blank canvas to start of history
     if (projectRef.current && stateRefs.current.undoStack.length === 0) {
-        setUndoStack([projectRef.current.exportJSON() as string]);
+      setUndoStack([projectRef.current.exportJSON() as string]);
     }
   }, []);
 
   const saveHistory = useCallback(() => {
     if (!projectRef.current) return;
     const currentState = projectRef.current.exportJSON() as string;
-    
+
     setUndoStack(prev => {
-        // Check if the current state is identical to the last to avoid redundant saves
-        if (prev.length > 0 && prev[prev.length - 1] === currentState) return prev;
-        
-        const newStack = [...prev, currentState];
-        if (newStack.length > 50) newStack.shift(); // Cap history to 50
-        return newStack;
+      // Check if the current state is identical to the last to avoid redundant saves
+      if (prev.length > 0 && prev[prev.length - 1] === currentState) return prev;
+
+      const newStack = [...prev, currentState];
+      if (newStack.length > 50) newStack.shift(); // Cap history to 50
+      return newStack;
     });
     setRedoStack([]); // Clear redo timeline because a new divergent action happened
   }, []);
@@ -92,7 +92,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     if (redoStack.length === 0 || !projectRef.current) return;
 
     const nextState = redoStack[0];
-    
+
     setUndoStack([...undoStack, nextState]);
     setRedoStack(redoStack.slice(1));
 
@@ -103,27 +103,27 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-        const activeNode = document.activeElement?.nodeName;
-        if (activeNode === 'INPUT' || activeNode === 'TEXTAREA') return;
+      const activeNode = document.activeElement?.nodeName;
+      if (activeNode === 'INPUT' || activeNode === 'TEXTAREA') return;
 
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-            e.preventDefault();
-            if (e.shiftKey) {
-                redo();
-            } else {
-                undo();
-            }
-            return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
         }
+        return;
+      }
 
-        if (!e.ctrlKey && !e.metaKey) {
-            switch(e.key.toLowerCase()) {
-                case 'p': setActiveTool('draw'); break;
-                case 'v': setActiveTool('select'); break;
-                case 'a': setActiveTool('edit'); break;
-                case 'w': setActiveTool('pressure'); break;
-            }
+      if (!e.ctrlKey && !e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'z': setActiveTool('draw'); break;
+          case 'x': setActiveTool('select'); break;
+          case 'c': setActiveTool('edit'); break;
+          case 'v': setActiveTool('pressure'); break;
         }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
