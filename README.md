@@ -1,50 +1,67 @@
-# Welcome to your Expo app 👋
+# Kurvo - Web-Based Vector Lineart Engine
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**Kurvo** is a highly specialized web-based vector drawing application designed to replicate the organic, variable-width line-art workflows of desktop software like PaintTool SAI. Unlike standard Bézier curve designers, Kurvo leverages a proprietary mathematical engine over **Paper.js** to draw dynamic ribbons using Centripetal Catmull-Rom splines, which pass directly through user-defined nodes.
 
-## Get started
+![Vector Lineart Engine](./public/vite.svg)
 
-1. Install dependencies
+## Target Audience
+- **Digital Artists & Illustrators** looking for familiar curve manipulation on the web completely free of heavy native desktop application installations.
+- **Web Animators & Developers** needing to export CSS-sequenced SVG logic directly into websites for scroll-animations or vector storytelling.
+- **Vector Enthusiasts** who find traditional vector handles unintuitive and prefer path-through-node routing logic.
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
+## Core Features
 
-   ```bash
-   npx expo start
-   ```
+- **Dynamic Ribbon Drawing:** Click to add nodes; the engine generates a smooth ribbon polygon responding magically to node pressure values.
+- **Select & Transform:** Drag a box bounding select to scale (uniformly with shift) and rotate entire vector splines. 
+- **Node Editing (Curve Slicing):** Seamlessly isolate nodes, drag to reshape curves without breaking tangents, and click empty curve rims to instantly split paths mathematically.
+- **Per-Node Pressure Control:** Drag nodes horizontally to visually expand or pinch the exact radius of the line.
+- **CSS SVG Animation Export:** Generate standalone HTML files showcasing what you drew fully animated via CSS natively, sequencing lines accurately.
 
-In the output, you'll find options to open the app in a
+---
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Tech Stack
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+This project was intentionally migrated off standard mobile-wrappers (like Expo) to maximize direct DOM 60 FPS performance and maintain accurate canvas pointer handling.
 
-## Get a fresh project
+- **Frontend Build Tool:** [Vite](https://vitejs.dev/)
+- **UI Framework:** [React (TypeScript)](https://react.dev/)
+- **Vector Math & Canvas Engine:** [Paper.js](http://paperjs.org/)
+- **Styling framework:** [Tailwind CSS](https://tailwindcss.com/)
+- **Iconography:** [Lucide React](https://lucide.dev/)
 
-When you're ready, run:
+---
 
+## Getting Started
+
+### 1. Installation
+Clone the repository, then install requirements via your node package manager:
 ```bash
-npm run reset-project
+git clone https://github.com/rivaiamin/kurvo.git
+cd kurvo
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Running Locally
+Boot the Vite dev server for instant Hot Module Replacement (HMR):
+```bash
+npm run dev
+```
 
-## Learn more
+### 3. Production Build
+Package and minify the application into standard assets:
+```bash
+npm run build
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Directory Structure
+- `src/hooks/usePaperEngine.ts` — The decoupled Canvas interaction layer mapping native Paper.js commands into the React ecosystem.
+- `src/components/` — Isolated UI and canvas components rendering standard Tailwind directives.
+- `src/context/` — State orchestration layer synchronizing drawing tools and global colors natively.
 
-## Join the community
+---
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+*This application fulfills MVP specifications according to Version 1.0 of the Kurvo Vector Engine PRD.*
