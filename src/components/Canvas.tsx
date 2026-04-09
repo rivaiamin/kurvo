@@ -18,6 +18,29 @@ export function Canvas() {
 
       {isAnimating && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-20">
+              <defs>
+                  {animatedPaths.map((path) => {
+                      const mask = path.mask;
+                      if (!mask) return null;
+                      const maskId = `mask-${path.id}`;
+                      return (
+                          <mask
+                              key={`mask-${path.id}`}
+                              id={maskId}
+                              maskUnits="userSpaceOnUse"
+                              x={0}
+                              y={0}
+                              width="100%"
+                              height="100%"
+                          >
+                              <rect x="0" y="0" width="100%" height="100%" fill="black" />
+                              <path d={mask.ribbonD} fill="white" />
+                              <path d={mask.capStartD} fill="white" />
+                              <path d={mask.capEndD} fill="white" />
+                          </mask>
+                      );
+                  })}
+              </defs>
               {animatedPaths.map((path, index) => (
                   <path
                       key={`anim-${path.id}`}
@@ -27,6 +50,7 @@ export function Canvas() {
                       strokeWidth={path.width}
                       strokeLinecap="round"
                       strokeLinejoin="round"
+                      mask={path.mask ? `url(#mask-${path.id})` : undefined}
                       className="animate-draw"
                       style={{
                           '--path-length': path.length,

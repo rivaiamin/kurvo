@@ -41,7 +41,10 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
     let draggedSegment: paper.Segment | null = null;
     let dragStartPressure = 1;
     let dragStartX = 0;
-    let lastClickTime = 0;
+    /** Only used for draw-mode “double-click to finish stroke” — must not share timing with edit/select/pressure. */
+    let lastDrawClickTime = 0;
+    /** Edit mode: remove node only when the same skeleton segment is clicked twice in a row (not after a draw click). */
+    let lastEditClick = { time: 0, segment: null as paper.Segment | null };
 
     let editsMade = false;
 
@@ -149,12 +152,15 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         const color = stateRef.current.currentColor;
         const brushSize = stateRef.current.brushSize;
 
-        const now = Date.now();
-        const isDoubleClick = (now - lastClickTime < 300);
-        lastClickTime = now;
+        let isDrawDoubleClick = false;
+        if (mode === 'draw') {
+            const now = Date.now();
+            isDrawDoubleClick = now - lastDrawClickTime < 300;
+            lastDrawClickTime = now;
+        }
 
         if (mode === 'draw') {
-            if (isDoubleClick) {
+            if (isDrawDoubleClick) {
                 currentGroupRef.current = null;
                 clearPaperSelection();
                 return;
@@ -189,7 +195,14 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         }
 
         if (mode === 'edit' || mode === 'pressure' || mode === 'select') {
-            const hitOptions = { segments: true, stroke: true, fill: true, tolerance: 10 };
+            const hitOptions = {
+                segments: true,
+                stroke: true,
+                fill: true,
+                tolerance: 10,
+                // Hover ring sits on top of nodes; without this, clicks “on the node” hit the ring and deselect.
+                match: (result: paper.HitResult) => result.item !== hoverIndicator,
+            };
             const hitResult = paper.project.hitTest(event.point, hitOptions);
 
             if (mode === 'select' && hitResult) {
@@ -212,6 +225,18 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
                 if (!group || !group.data?.isStroke) group = hitResult.item as paper.Group;
 
                 if (group && group.data && group.data.isStroke) {
+                    let removeNodeOnEditDoubleClick = false;
+                    if (mode === 'edit' && hitResult.type === 'segment' && hitResult.item.name === 'skeleton') {
+                        const now = Date.now();
+                        const seg = hitResult.segment;
+                        if (lastEditClick.segment === seg && now - lastEditClick.time < 300) {
+                            removeNodeOnEditDoubleClick = true;
+                        }
+                        lastEditClick = { time: now, segment: seg };
+                    } else if (mode === 'edit') {
+                        lastEditClick = { time: 0, segment: null };
+                    }
+
                     if (activeSelectionRef.current !== group) {
                         clearPaperSelection();
                         activeSelectionRef.current = group;
@@ -225,12 +250,13 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
                         group.children['skeleton'].selected = true;
 
                         if (hitResult.type === 'segment' && hitResult.item.name === 'skeleton') {
-                            if (mode === 'edit' && isDoubleClick) {
+                            if (mode === 'edit' && removeNodeOnEditDoubleClick) {
                                 const skel = hitResult.item as paper.Path;
                                 hitResult.segment.remove();
                                 skel.smooth({ type: 'catmull-rom', factor: 0.5 });
                                 updateRibbon(group);
                                 draggedSegment = null;
+                                lastEditClick = { time: 0, segment: null };
                                 editsMade = true;
                             } else {
                                 draggedSegment = hitResult.segment;
@@ -266,7 +292,13 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         const mode = stateRef.current.activeTool;
 
         if (mode === 'edit' || mode === 'pressure' || mode === 'select') {
-            const hitOptions = { segments: true, stroke: true, fill: true, tolerance: 6 };
+            const hitOptions = {
+                segments: true,
+                stroke: true,
+                fill: true,
+                tolerance: 6,
+                match: (result: paper.HitResult) => result.item !== hoverIndicator,
+            };
             const hitResult = paper.project.hitTest(event.point, hitOptions);
 
             if (hitResult && hitResult.item !== hoverIndicator) {

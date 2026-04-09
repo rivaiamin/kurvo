@@ -54,12 +54,26 @@ export function Toolbar() {
     const width = projectRef.current.view.viewSize.width;
     const height = projectRef.current.view.viewSize.height;
 
+    let defsHTML = '';
     let pathsHTML = '';
     skeletons.forEach((skel, index) => {
       const group = skel.parent;
       const color = (group.children['ribbon'].fillColor as paper.Color).toCSS(true);
       const strokeWidth = (skel.data.baseWidth || 4) * 2;
       const length = skel.length;
+
+      const ribbon = group.children['ribbon'] as paper.Path;
+      const capStart = group.children['capStart'] as paper.Path;
+      const capEnd = group.children['capEnd'] as paper.Path;
+      const maskId = `mask-${skel.id}`;
+
+      defsHTML += `
+      <mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
+        <rect x="0" y="0" width="${width}" height="${height}" fill="black" />
+        <path d="${ribbon.pathData}" fill="white" />
+        <path d="${capStart.pathData}" fill="white" />
+        <path d="${capEnd.pathData}" fill="white" />
+      </mask>`;
 
       pathsHTML += `
       <path
@@ -69,6 +83,7 @@ export function Toolbar() {
         stroke-width="${strokeWidth}"
         stroke-linecap="round"
         stroke-linejoin="round"
+        mask="url(#${maskId})"
         class="animate-draw"
         style="--path-length: ${length}; stroke-dasharray: ${length}; stroke-dashoffset: ${length}; animation-delay: ${index * 0.4}s"
       />`;
@@ -89,6 +104,9 @@ export function Toolbar() {
 </head>
 <body>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="animated-canvas">
+    <defs>
+      ${defsHTML}
+    </defs>
     ${pathsHTML}
   </svg>
 </body>
@@ -116,12 +134,21 @@ export function Toolbar() {
       const color = (group.children['ribbon'].fillColor as paper.Color).toCSS(true);
       const width = (skel.data.baseWidth || 4) * 2;
 
+      const ribbon = group.children['ribbon'] as paper.Path;
+      const capStart = group.children['capStart'] as paper.Path;
+      const capEnd = group.children['capEnd'] as paper.Path;
+
       return {
         id: skel.id,
         d: skel.pathData,
         color: color,
         length: skel.length,
-        width: width
+        width: width,
+        mask: {
+          ribbonD: ribbon.pathData,
+          capStartD: capStart.pathData,
+          capEndD: capEnd.pathData
+        }
       };
     });
 

@@ -6,4 +6,9 @@ export interface PathData {
   color: string;
   length: number;
   width: number;
+  mask?: {
+    ribbonD: string;
+    capStartD: string;
+    capEndD: string;
+  };
 }
