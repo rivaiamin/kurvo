@@ -1,0 +1,348 @@
+// @ts-nocheck
+import { useEffect, useRef } from 'react';
+import paper from 'paper';
+import { useEditor } from '../context/EditorContext';
+
+export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
+  const { activeTool, currentColor, isAnimating, projectRef, setCurrentColor } = useEditor();
+
+  const stateRef = useRef({ activeTool, currentColor, isAnimating });
+  
+  useEffect(() => {
+    stateRef.current = { activeTool, currentColor, isAnimating };
+  }, [activeTool, currentColor, isAnimating]);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    
+    paper.setup(canvasRef.current);
+    projectRef.current = paper.project;
+
+    const tool = new paper.Tool();
+    let transformBox: paper.Group | null = null;
+    let transformAction: string | null = null;
+    let scalePivot: paper.Point | null = null;
+    const currentGroupRef = { current: null as paper.Group | null };
+    const activeSelectionRef = { current: null as paper.Group | null };
+
+    // Drag tracking state
+    let draggedSegment: paper.Segment | null = null;
+    let dragStartPressure = 1;
+    let dragStartX = 0;
+    let lastClickTime = 0;
+
+    const updateRibbon = (group: paper.Group) => {
+        const skeleton = group.children['skeleton'] as paper.Path;
+        const ribbon = group.children['ribbon'] as paper.Path;
+        const capStart = group.children['capStart'] as paper.Path;
+        const capEnd = group.children['capEnd'] as paper.Path;
+
+        if (!skeleton || skeleton.segments.length < 2) return;
+        const length = skeleton.length;
+        if (length === 0) return;
+
+        const steps = Math.ceil(length / 3);
+        const baseWidth = skeleton.data.baseWidth || 4;
+
+        let left = [];
+        let right = [];
+
+        for (let i = 0; i <= steps; i++) {
+            const offset = Math.min((i / steps) * length, length);
+            const loc = skeleton.getLocationAt(offset);
+            if (!loc) continue;
+
+            let p1 = loc.curve.segment1.data?.pressure ?? 1;
+            let p2 = loc.curve.segment2.data?.pressure ?? 1;
+            let pressure = p1 + (p2 - p1) * loc.parameter;
+
+            const width = baseWidth * pressure;
+            const normal = loc.normal;
+
+            left.push(loc.point.add(normal.multiply(width)));
+            right.push(loc.point.subtract(normal.multiply(width)));
+        }
+
+        ribbon.segments = [...left, ...right.reverse()];
+
+        const pFirst = skeleton.firstSegment.point;
+        const rFirst = baseWidth * (skeleton.firstSegment.data?.pressure ?? 1);
+        capStart.position = pFirst;
+        capStart.scaling = new paper.Point(rFirst, rFirst);
+
+        const pLast = skeleton.lastSegment.point;
+        const rLast = baseWidth * (skeleton.lastSegment.data?.pressure ?? 1);
+        capEnd.position = pLast;
+        capEnd.scaling = new paper.Point(rLast, rLast);
+    };
+
+    const clearPaperSelection = () => {
+        if (transformBox) {
+            transformBox.remove();
+            transformBox = null;
+        }
+        if (paper.project) {
+            paper.project.getItems({ name: 'skeleton' }).forEach(item => item.selected = false);
+        }
+        activeSelectionRef.current = null;
+    };
+    (window as any).clearPaperSelection = clearPaperSelection;
+
+    const drawTransformBox = (group: paper.Group) => {
+        if (transformBox) transformBox.remove();
+        if (!group) return;
+
+        const bounds = group.bounds;
+        const boxColor = '#3b82f6';
+
+        const box = new paper.Path.Rectangle(bounds);
+        box.strokeColor = boxColor;
+        box.strokeWidth = 1.5;
+        box.dashArray = [4, 4];
+
+        transformBox = new paper.Group([box]);
+        transformBox.data = { isTransformBox: true };
+
+        const createHandle = (point: paper.Point, name: string) => {
+            const handle = new paper.Path.Rectangle({
+                point: [point.x - 4, point.y - 4], size: [8, 8],
+                fillColor: '#ffffff', strokeColor: boxColor, strokeWidth: 1.5
+            });
+            handle.data = { isHandle: true, type: name };
+            transformBox!.addChild(handle);
+        };
+
+        createHandle(bounds.topLeft, 'tl');
+        createHandle(bounds.topRight, 'tr');
+        createHandle(bounds.bottomLeft, 'bl');
+        createHandle(bounds.bottomRight, 'br');
+
+        const topCenter = bounds.topCenter;
+        const rotLine = new paper.Path.Line(topCenter, new paper.Point(topCenter.x, topCenter.y - 25));
+        rotLine.strokeColor = boxColor;
+        const rotHandle = new paper.Path.Circle(new paper.Point(topCenter.x, topCenter.y - 25), 5);
+        rotHandle.fillColor = '#ffffff'; rotHandle.strokeColor = boxColor;
+        rotHandle.data = { isHandle: true, type: 'rotate' };
+
+        transformBox.addChild(rotLine);
+        transformBox.addChild(rotHandle);
+    };
+
+    tool.onMouseDown = (event: paper.ToolEvent) => {
+        if (stateRef.current.isAnimating) return;
+
+        const mode = stateRef.current.activeTool;
+        const color = stateRef.current.currentColor;
+
+        const now = Date.now();
+        const isDoubleClick = (now - lastClickTime < 300);
+        lastClickTime = now;
+
+        if (mode === 'draw') {
+            if (!currentGroupRef.current) {
+                const group = new paper.Group({ data: { isStroke: true } });
+                const skeleton = new paper.Path({ name: 'skeleton', strokeColor: '#000000', opacity: 0.01, selected: true });
+                skeleton.data = { baseWidth: 4 };
+
+                const ribbon = new paper.Path({ name: 'ribbon', fillColor: color, closed: true });
+                const capStart = new paper.Path.Circle({ center: [0, 0], radius: 1, fillColor: color, name: 'capStart', applyMatrix: false });
+                const capEnd = new paper.Path.Circle({ center: [0, 0], radius: 1, fillColor: color, name: 'capEnd', applyMatrix: false });
+
+                group.addChildren([ribbon, capStart, capEnd, skeleton]);
+                currentGroupRef.current = group;
+                activeSelectionRef.current = group;
+            }
+
+            const skel = currentGroupRef.current.children['skeleton'] as paper.Path;
+            skel.add(event.point);
+            const seg = skel.lastSegment;
+
+            if (seg) {
+                seg.data = seg.data || {};
+                seg.data.pressure = 1;
+            }
+
+            skel.smooth({ type: 'catmull-rom', factor: 0.5 });
+            updateRibbon(currentGroupRef.current);
+        }
+
+        if (mode === 'edit' || mode === 'pressure' || mode === 'select') {
+            const hitOptions = { segments: true, stroke: true, fill: true, tolerance: 10 };
+            const hitResult = paper.project.hitTest(event.point, hitOptions);
+
+            if (mode === 'select' && hitResult) {
+                if (hitResult.item.data && hitResult.item.data.isHandle) {
+                    transformAction = hitResult.item.data.type;
+                    const bounds = activeSelectionRef.current!.bounds;
+                    if (transformAction === 'tl') scalePivot = bounds.bottomRight;
+                    if (transformAction === 'tr') scalePivot = bounds.bottomLeft;
+                    if (transformAction === 'bl') scalePivot = bounds.topRight;
+                    if (transformAction === 'br') scalePivot = bounds.topLeft;
+                    return;
+                }
+                if (hitResult.item.parent && hitResult.item.parent.data?.isTransformBox) {
+                    transformAction = 'move'; return;
+                }
+            }
+
+            if (hitResult) {
+                let group = hitResult.item.parent as paper.Group;
+                if (!group || !group.data?.isStroke) group = hitResult.item as paper.Group;
+
+                if (group && group.data && group.data.isStroke) {
+                    if (activeSelectionRef.current !== group) {
+                        clearPaperSelection();
+                        activeSelectionRef.current = group;
+                        setCurrentColor((group.children['ribbon'].fillColor as paper.Color).toCSS(true));
+                    }
+
+                    if (mode === 'select') {
+                        drawTransformBox(group);
+                        transformAction = 'move';
+                    } else {
+                        group.children['skeleton'].selected = true;
+
+                        if (hitResult.type === 'segment' && hitResult.item.name === 'skeleton') {
+                            if (mode === 'edit' && isDoubleClick) {
+                                const skel = hitResult.item as paper.Path;
+                                hitResult.segment.remove();
+                                skel.smooth({ type: 'catmull-rom', factor: 0.5 });
+                                updateRibbon(group);
+                                draggedSegment = null;
+                            } else {
+                                draggedSegment = hitResult.segment;
+                                dragStartPressure = hitResult.segment.data?.pressure ?? 1;
+                                dragStartX = event.point.x;
+                            }
+                        } else if (mode === 'edit' && ['fill', 'stroke', 'curve'].includes(hitResult.type)) {
+                            const skel = group.children['skeleton'] as paper.Path;
+                            const loc = skel.getNearestLocation(event.point);
+                            if (loc) {
+                                const newSeg = skel.insert(loc.index + 1, loc.point);
+                                const p1 = loc.curve.segment1.data?.pressure ?? 1;
+                                const p2 = loc.curve.segment2.data?.pressure ?? 1;
+                                newSeg.data = { pressure: p1 + (p2 - p1) * loc.parameter };
+                                skel.smooth({ type: 'catmull-rom', factor: 0.5 });
+                                updateRibbon(group);
+                                draggedSegment = newSeg;
+                                dragStartPressure = newSeg.data.pressure;
+                                dragStartX = event.point.x;
+                            }
+                        }
+                    }
+                }
+            } else {
+                clearPaperSelection();
+            }
+        }
+    };
+
+    tool.onMouseDrag = (event: paper.ToolEvent) => {
+        if (stateRef.current.isAnimating) return;
+        
+        if (event.modifiers.space || (event.event as any).buttons === 4) {
+            paper.view.center = paper.view.center.subtract(event.delta);
+            return;
+        }
+
+        const mode = stateRef.current.activeTool;
+
+        if (mode === 'edit' && draggedSegment) {
+            draggedSegment.point = draggedSegment.point.add(event.delta);
+            (draggedSegment.path as paper.Path).smooth({ type: 'catmull-rom', factor: 0.5 });
+            updateRibbon(draggedSegment.path.parent as paper.Group);
+        }
+
+        if (mode === 'pressure' && draggedSegment) {
+            const dx = event.point.x - dragStartX;
+            if (!draggedSegment.data) draggedSegment.data = {};
+            draggedSegment.data.pressure = Math.max(0.05, dragStartPressure + dx * 0.015);
+            updateRibbon(draggedSegment.path.parent as paper.Group);
+        }
+
+        if (mode === 'select' && activeSelectionRef.current && transformAction) {
+            const group = activeSelectionRef.current;
+            if (transformAction === 'move') {
+                group.position = group.position.add(event.delta);
+            } else if (['tl', 'tr', 'bl', 'br'].includes(transformAction)) {
+                const bounds = group.bounds;
+                let dx = 0, dy = 0;
+                if (transformAction === 'tl') { dx = -event.delta.x; dy = -event.delta.y; }
+                if (transformAction === 'tr') { dx = event.delta.x; dy = -event.delta.y; }
+                if (transformAction === 'bl') { dx = -event.delta.x; dy = event.delta.y; }
+                if (transformAction === 'br') { dx = event.delta.x; dy = event.delta.y; }
+
+                if (bounds.width + dx > 2 && bounds.height + dy > 2) {
+                    let sx = (bounds.width + dx) / bounds.width;
+                    let sy = (bounds.height + dy) / bounds.height;
+                    if (event.modifiers.shift) {
+                        const uniform = Math.max(sx, sy); sx = uniform; sy = uniform;
+                    }
+                    group.scale(sx, sy, scalePivot!);
+                }
+            } else if (transformAction === 'rotate') {
+                const center = group.bounds.center;
+                const startVec = event.point.subtract(event.delta).subtract(center);
+                const endVec = event.point.subtract(center);
+                group.rotate(endVec.angle - startVec.angle, center);
+            }
+            drawTransformBox(group);
+        }
+    };
+
+    tool.onMouseUp = () => {
+        draggedSegment = null;
+        transformAction = null;
+    };
+
+    tool.onKeyUp = (event: paper.KeyEvent) => {
+        if (stateRef.current.isAnimating) return;
+        const mode = stateRef.current.activeTool;
+
+        if (event.key === 'enter') {
+            currentGroupRef.current = null;
+            clearPaperSelection();
+        }
+
+        if ((event.key === 'backspace' || event.key === 'delete') && mode === 'select') {
+            if (activeSelectionRef.current) {
+                activeSelectionRef.current.remove();
+                clearPaperSelection();
+            }
+        }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+        if (!paper.view) return;
+        e.preventDefault();
+
+        const view = paper.view;
+        const oldZoom = view.zoom;
+        const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
+        let newZoom = Math.max(0.1, Math.min(oldZoom * zoomDelta, 10));
+
+        const mouseRect = canvasRef.current!.getBoundingClientRect();
+        const mouseX = e.clientX - mouseRect.left;
+        const mouseY = e.clientY - mouseRect.top;
+        const mousePoint = view.viewToProject(new paper.Point(mouseX, mouseY));
+
+        const zoomRatio = oldZoom / newZoom;
+        const newCenter = mousePoint.add(view.center.subtract(mousePoint).multiply(zoomRatio));
+
+        view.zoom = newZoom;
+        view.center = newCenter;
+    };
+
+    canvasRef.current.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+        if (canvasRef.current) {
+            canvasRef.current.removeEventListener('wheel', handleWheel);
+        }
+        tool.remove();
+        if (paper.project) {
+            paper.project.clear();
+        }
+    };
+  }, []);
+}
