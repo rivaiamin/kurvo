@@ -21,6 +21,8 @@ interface EditorContextProps {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  projectRevision: number;
+  bumpProjectRevision: () => void;
 }
 
 const EditorContext = createContext<EditorContextProps | undefined>(undefined);
@@ -36,6 +38,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [redoStack, setRedoStack] = useState<string[]>([]);
 
   const projectRef = useRef<paper.Project | null>(null);
+  const [projectRevision, setProjectRevision] = useState(0);
+  const bumpProjectRevision = useCallback(() => setProjectRevision((r) => r + 1), []);
 
   const stateRefs = useRef({ undoStack, redoStack });
   useEffect(() => { stateRefs.current = { undoStack, redoStack }; }, [undoStack, redoStack]);
@@ -122,6 +126,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           case 'x': setActiveTool('select'); break;
           case 'c': setActiveTool('edit'); break;
           case 'v': setActiveTool('pressure'); break;
+          case 'e': setActiveTool('eraser'); break;
         }
       }
     };
@@ -141,7 +146,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         projectRef, resetView,
         initHistory, saveHistory, undo, redo,
         canUndo: undoStack.length > 1,
-        canRedo: redoStack.length > 0
+        canRedo: redoStack.length > 0,
+        projectRevision,
+        bumpProjectRevision
       }}
     >
       {children}

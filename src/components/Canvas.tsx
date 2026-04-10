@@ -35,8 +35,8 @@ export function Canvas() {
                           >
                               <rect x="0" y="0" width="100%" height="100%" fill="black" />
                               <path d={mask.ribbonD} fill="white" />
-                              <path d={mask.capStartD} fill="white" />
-                              <path d={mask.capEndD} fill="white" />
+                              {mask.capStartD && <path d={mask.capStartD} fill="white" />}
+                              {mask.capEndD && <path d={mask.capEndD} fill="white" />}
                           </mask>
                       );
                   })}

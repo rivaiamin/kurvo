@@ -1,4 +1,4 @@
-export type ToolMode = 'draw' | 'select' | 'edit' | 'pressure';
+export type ToolMode = 'draw' | 'select' | 'edit' | 'pressure' | 'eraser';
 
 export interface PathData {
   id: number;
@@ -6,9 +6,10 @@ export interface PathData {
   color: string;
   length: number;
   width: number;
+  closed?: boolean;
   mask?: {
     ribbonD: string;
-    capStartD: string;
-    capEndD: string;
+    capStartD?: string;
+    capEndD?: string;
   };
 }

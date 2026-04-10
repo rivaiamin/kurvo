@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Code, Download, Focus, Maximize2, MousePointer2, Move, Palette, PenTool, Play, Redo, Square, Trash2, Undo } from 'lucide-react';
+import { Code, Download, Eraser, Focus, Maximize2, MousePointer2, Move, Palette, PenTool, Play, Redo, Square, Trash2, Undo } from 'lucide-react';
 import React from 'react';
 import { useEditor } from '../context/EditorContext';
 import type { ToolMode } from '../types';
@@ -69,13 +69,14 @@ export function Toolbar() {
       const capStart = group.children['capStart'] as paper.Path;
       const capEnd = group.children['capEnd'] as paper.Path;
       const maskId = `mask-${skel.id}`;
+      const closed = !!skel.closed;
 
       defsHTML += `
       <mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
         <rect x="0" y="0" width="${width}" height="${height}" fill="black" />
         <path d="${ribbon.pathData}" fill="white" />
-        <path d="${capStart.pathData}" fill="white" />
-        <path d="${capEnd.pathData}" fill="white" />
+        ${closed ? '' : `<path d="${capStart.pathData}" fill="white" />
+        <path d="${capEnd.pathData}" fill="white" />`}
       </mask>`;
 
       pathsHTML += `
@@ -141,17 +142,21 @@ export function Toolbar() {
       const capStart = group.children['capStart'] as paper.Path;
       const capEnd = group.children['capEnd'] as paper.Path;
 
+      const closed = !!skel.closed;
       return {
         id: skel.id,
         d: skel.pathData,
         color: color,
         length: skel.length,
         width: width,
-        mask: {
-          ribbonD: ribbon.pathData,
-          capStartD: capStart.pathData,
-          capEndD: capEnd.pathData
-        }
+        closed,
+        mask: closed
+          ? { ribbonD: ribbon.pathData }
+          : {
+              ribbonD: ribbon.pathData,
+              capStartD: capStart.pathData,
+              capEndD: capEnd.pathData
+            }
       };
     });
 
@@ -174,6 +179,9 @@ export function Toolbar() {
           </button>
           <button onClick={() => switchTool('pressure')} className={`px-3 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-all ${activeTool === 'pressure' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`} title="Pressure (V)">
             <Maximize2 size={16} /> Pressure
+          </button>
+          <button onClick={() => switchTool('eraser')} className={`px-3 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-all ${activeTool === 'eraser' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`} title="Boolean Eraser (E)">
+            <Eraser size={16} /> Eraser
           </button>
         </div>
 
