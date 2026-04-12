@@ -5,14 +5,19 @@ import React from 'react';
 import { useEditor } from '../context/EditorContext';
 
 export function LayerPanel() {
-  const { projectRef, projectRevision, bumpProjectRevision, isAnimating } = useEditor();
+  const { projectRef, projectRevision, bumpProjectRevision, isAnimating, saveHistory } = useEditor();
 
   const project = projectRef.current;
-  const layers = (project?.layers ?? []).filter((l) => l.name !== '__ui');
+  const layers = (project?.layers ?? []).filter((l) => l.name !== '__ui' && l.name !== '__reference');
+  const referenceLayer = project?.layers.find((l) => l.name === '__reference');
+  const referenceGroups =
+    referenceLayer?.children.filter((c) => c instanceof paper.Group && c.data?.isReference) ?? [];
 
-  const keepUiOnTop = () => {
+  const normalizeLayerOrder = () => {
     if (!projectRef.current) return;
+    const ref = projectRef.current.layers.find((l) => l.name === '__reference');
     const ui = projectRef.current.layers.find((l) => l.name === '__ui');
+    if (ref) ref.sendToBack();
     if (ui) ui.bringToFront();
   };
 
@@ -23,25 +28,25 @@ export function LayerPanel() {
 
   const addLayer = () => {
     if (!projectRef.current) return;
-    const n = projectRef.current.layers.filter((l) => l.name !== '__ui').length + 1;
+    const n = projectRef.current.layers.filter((l) => l.name !== '__ui' && l.name !== '__reference').length + 1;
     const layer = new paper.Layer({ name: `Layer ${n}` });
     layer.activate();
-    keepUiOnTop();
+    normalizeLayerOrder();
     bumpProjectRevision();
   };
 
   const deleteLayer = (layer: paper.Layer) => {
     if (!projectRef.current) return;
-    const drawable = projectRef.current.layers.filter((l) => l.name !== '__ui');
+    const drawable = projectRef.current.layers.filter((l) => l.name !== '__ui' && l.name !== '__reference');
     if (drawable.length <= 1) return;
     const p = projectRef.current;
     const wasActive = layer === p.activeLayer;
     layer.remove();
     if (wasActive && p.layers.length > 0) {
-      const top = p.layers.filter((l) => l.name !== '__ui').pop();
+      const top = p.layers.filter((l) => l.name !== '__ui' && l.name !== '__reference').pop();
       if (top) top.activate();
     }
-    keepUiOnTop();
+    normalizeLayerOrder();
     bumpProjectRevision();
   };
 
@@ -52,21 +57,34 @@ export function LayerPanel() {
 
   const moveForward = (layer: paper.Layer) => {
     if (!project) return;
-    const drawable = project.layers.filter((l) => l.name !== '__ui');
+    const drawable = project.layers.filter((l) => l.name !== '__ui' && l.name !== '__reference');
     const idx = drawable.indexOf(layer);
     if (idx < 0 || idx >= drawable.length - 1) return;
     layer.insertAbove(drawable[idx + 1]);
-    keepUiOnTop();
+    normalizeLayerOrder();
     bumpProjectRevision();
   };
 
   const moveBackward = (layer: paper.Layer) => {
     if (!project) return;
-    const drawable = project.layers.filter((l) => l.name !== '__ui');
+    const drawable = project.layers.filter((l) => l.name !== '__ui' && l.name !== '__reference');
     const idx = drawable.indexOf(layer);
     if (idx <= 0) return;
     layer.insertBelow(drawable[idx - 1]);
-    keepUiOnTop();
+    normalizeLayerOrder();
+    bumpProjectRevision();
+  };
+
+  const removeReferenceGroup = (id: number) => {
+    if (!projectRef.current) return;
+    const item = projectRef.current.getItem({ id });
+    let g: paper.Group | null = null;
+    if (item instanceof paper.Group && item.data?.isReference) g = item;
+    else if (item?.parent instanceof paper.Group && item.parent.data?.isReference) g = item.parent;
+    if (!g || g.layer?.name !== '__reference') return;
+    g.remove();
+    (window as any).clearPaperSelection?.();
+    saveHistory();
     bumpProjectRevision();
   };
 
@@ -87,6 +105,36 @@ export function LayerPanel() {
           <Plus size={16} />
         </button>
       </div>
+      {referenceGroups.length > 0 && (
+        <div className="px-2 pt-2 pb-1 border-b border-slate-200">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Reference (under artwork)</div>
+          <ul className="space-y-1">
+            {referenceGroups.map((g) => (
+              <li key={g.id}>
+                <div className="flex items-center gap-1 rounded-md border border-dashed border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
+                  <span className="flex-1 truncate">Image ref</span>
+                  <button
+                    type="button"
+                    className="text-indigo-600 hover:underline shrink-0"
+                    onClick={() => (window as any).selectReferenceGroupById?.(g.id)}
+                  >
+                    Select
+                  </button>
+                  <button
+                    type="button"
+                    className="text-red-500 hover:text-red-700 shrink-0 p-0.5"
+                    title="Remove reference"
+                    onClick={() => removeReferenceGroup(g.id)}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <ul className="flex-1 overflow-y-auto p-2 space-y-1">
         {layers
           .slice()

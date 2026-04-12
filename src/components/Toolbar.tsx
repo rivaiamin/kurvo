@@ -1,7 +1,7 @@
 // @ts-nocheck
-import { Code, Download, Eraser, Focus, Maximize2, MousePointer2, Move, Palette, PenTool, Play, Redo, Square, Trash2, Undo } from 'lucide-react';
+import { Code, Download, Eraser, Focus, ImagePlus, Maximize2, MousePointer2, Move, Palette, PenTool, Play, Redo, Square, Trash2, Undo } from 'lucide-react';
 import paper from 'paper';
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useEditor } from '../context/EditorContext';
 import type { ToolMode } from '../types';
 
@@ -12,8 +12,12 @@ export function Toolbar() {
     brushSize, setBrushSize,
     isAnimating, setIsAnimating,
     setAnimatedPaths, projectRef, resetView,
-    undo, redo, canUndo, canRedo, saveHistory
+    undo, redo, canUndo, canRedo, saveHistory,
+    selectionRevision
   } = useEditor();
+
+  const referenceFileRef = useRef<HTMLInputElement>(null);
+  const [refOpacitySlider, setRefOpacitySlider] = useState(65);
 
   const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const color = e.target.value;
@@ -27,10 +31,41 @@ export function Toolbar() {
     const active = (window as any).getActiveStrokeGroup?.();
     if (active?.data?.isStroke) groups.add(active);
     groups.forEach((group) => {
+      if (!group.data?.isStroke) return;
       (group.children['ribbon'] as paper.Path).fillColor = paperColor;
       (group.children['capStart'] as paper.Path).fillColor = paperColor;
       (group.children['capEnd'] as paper.Path).fillColor = paperColor;
     });
+  };
+
+  const handleReferenceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return;
+    // Data URL embeds pixels in the string so Paper.js undo/history (importJSON) never reloads a dead blob: URL.
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      (window as any).addReferenceImageFromUrl?.(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const selectedGroup = (window as any).getActiveStrokeGroup?.() as paper.Group | undefined;
+  const selectedIsReference = selectedGroup?.data?.isReference;
+
+  useEffect(() => {
+    const g = (window as any).getActiveStrokeGroup?.() as paper.Group | undefined;
+    if (g?.data?.isReference) {
+      setRefOpacitySlider(Math.round((g.opacity ?? 1) * 100));
+    }
+  }, [selectionRevision, activeTool]);
+
+  const setReferenceOpacity = (pct: number) => {
+    const g = (window as any).getActiveStrokeGroup?.();
+    if (!g?.data?.isReference) return;
+    g.opacity = Math.max(0.05, Math.min(1, pct / 100));
+    paper.view?.draw();
   };
 
   const switchTool = (tool: ToolMode) => {
@@ -42,7 +77,11 @@ export function Toolbar() {
   const handleExportSVG = () => {
     if ((window as any).clearPaperSelection) (window as any).clearPaperSelection();
     if (!projectRef.current) return;
+    const refLayer = projectRef.current.layers.find((l) => l.name === '__reference');
+    const refWasVisible = refLayer?.visible;
+    if (refLayer) refLayer.visible = false;
     const svgString = projectRef.current.exportSVG({ asString: true }) as string;
+    if (refLayer) refLayer.visible = refWasVisible ?? true;
     const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -211,6 +250,43 @@ export function Toolbar() {
         <button onClick={resetView} className="px-3 py-1.5 bg-slate-100 rounded-md border text-slate-500 hover:text-indigo-600 hover:bg-white transition-all flex items-center gap-2 text-sm font-medium" title="Reset Zoom/Pan">
           <Focus size={16} /> <span className="hidden md:inline">Reset View</span>
         </button>
+
+        <input
+          ref={referenceFileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleReferenceFile}
+        />
+        <button
+          type="button"
+          onClick={() => referenceFileRef.current?.click()}
+          className={`px-3 py-1.5 bg-slate-100 rounded-md border text-slate-600 hover:text-indigo-600 hover:bg-white transition-all flex items-center gap-2 text-sm font-medium ${isAnimating ? 'opacity-50 pointer-events-none' : ''}`}
+          title="Place a local image under your artwork (not uploaded). Use Select tool to move, scale, or rotate; Alt+click selects it when covered by strokes."
+        >
+          <ImagePlus size={16} /> <span className="hidden lg:inline">Reference image</span>
+        </button>
+
+        {activeTool === 'select' && selectedIsReference && (
+          <label className={`flex items-center gap-2 text-xs text-slate-600 ${isAnimating ? 'opacity-50 pointer-events-none' : ''}`}>
+            <span className="font-medium whitespace-nowrap">Ref opacity</span>
+            <input
+              type="range"
+              min="5"
+              max="100"
+              value={refOpacitySlider}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                setRefOpacitySlider(v);
+                setReferenceOpacity(v);
+              }}
+              onMouseUp={() => saveHistory()}
+              onBlur={() => saveHistory()}
+              className="w-20 cursor-pointer accent-indigo-600"
+            />
+            <span className="w-6 tabular-nums">{refOpacitySlider}</span>
+          </label>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">

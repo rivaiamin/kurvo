@@ -101,7 +101,7 @@ function replaceRibbonWithBooleanResult(group: paper.Group, result: paper.Item |
 }
 
 export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
-  const { activeTool, currentColor, isAnimating, brushSize, projectRef, setCurrentColor, saveHistory, initHistory, bumpProjectRevision } = useEditor();
+  const { activeTool, currentColor, isAnimating, brushSize, projectRef, setCurrentColor, saveHistory, initHistory, bumpProjectRevision, bumpSelectionRevision } = useEditor();
 
   const stateRef = useRef({ activeTool, currentColor, isAnimating, brushSize });
 
@@ -115,8 +115,48 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
     paper.setup(canvasRef.current);
     projectRef.current = paper.project;
     const drawLayer = paper.project.activeLayer;
+    const referenceLayer = new paper.Layer({ name: '__reference' });
+    referenceLayer.sendToBack();
     const uiLayer = new paper.Layer({ name: '__ui' });
     drawLayer.activate();
+
+    const bringUiToFront = () => {
+      const ui = paper.project.layers.find((l) => l.name === '__ui');
+      if (ui) ui.bringToFront();
+    };
+
+    const addReferenceImageFromUrl = (url: string) => {
+      const prevActive = paper.project.activeLayer;
+      referenceLayer.activate();
+      const raster = new paper.Raster(url);
+      const revokeIfBlob = () => {
+        if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url);
+      };
+      raster.onLoad = () => {
+        const view = paper.view;
+        const maxDim = Math.max(view.viewSize.width, view.viewSize.height) * 0.85;
+        const rw = raster.width;
+        const rh = raster.height;
+        const scale = rw > 0 && rh > 0 ? Math.min(1, maxDim / Math.max(rw, rh)) : 1;
+        const g = new paper.Group({ data: { isReference: true } });
+        g.addChild(raster);
+        raster.position = new paper.Point(0, 0);
+        if (scale !== 1) raster.scale(scale);
+        g.position = view.center;
+        g.opacity = 0.65;
+        if (prevActive && prevActive !== referenceLayer) prevActive.activate();
+        else drawLayer.activate();
+        revokeIfBlob();
+        saveHistory();
+        bumpProjectRevision();
+        bumpSelectionRevision();
+        bringUiToFront();
+      };
+      raster.onError = () => {
+        revokeIfBlob();
+      };
+    };
+    (window as any).addReferenceImageFromUrl = addReferenceImageFromUrl;
 
     initHistory();
     bumpProjectRevision();
@@ -250,6 +290,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         paper.project.getItems({ name: 'skeleton' }).forEach((item) => (item.selected = false));
       }
       activeSelectionRef.current = null;
+      bumpSelectionRevision();
     };
     (window as any).clearPaperSelection = clearPaperSelection;
     (window as any).getActiveStrokeGroup = () => activeSelectionRef.current;
@@ -297,6 +338,21 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
       transformBox.addChild(rotLine);
       transformBox.addChild(rotHandle);
     };
+
+    const selectReferenceGroupById = (id: number) => {
+      const item = paper.project.getItem({ id });
+      let group: paper.Group | null = null;
+      if (item instanceof paper.Group && item.data?.isReference) group = item;
+      else if (item?.parent instanceof paper.Group && item.parent.data?.isReference) group = item.parent;
+      if (!group || group.layer !== referenceLayer) return;
+      clearPaperSelection();
+      activeSelectionRef.current = group;
+      drawTransformBox(group);
+      transformAction = 'move';
+      bumpSelectionRevision();
+      bringUiToFront();
+    };
+    (window as any).selectReferenceGroupById = selectReferenceGroupById;
 
     tool.onMouseDown = (event: paper.ToolEvent) => {
       if (stateRef.current.isAnimating) return;
@@ -378,11 +434,11 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
           tolerance: 10,
           match: (result: paper.HitResult) => result.item !== hoverIndicator
         };
-        const hitResult = paper.project.hitTest(event.point, hitOptions);
+        const hitFull = paper.project.hitTest(event.point, hitOptions);
 
-        if (mode === 'select' && hitResult) {
-          if (hitResult.item.data && hitResult.item.data.isHandle) {
-            transformAction = hitResult.item.data.type;
+        if (mode === 'select' && hitFull) {
+          if (hitFull.item.data && hitFull.item.data.isHandle) {
+            transformAction = hitFull.item.data.type;
             const bounds = activeSelectionRef.current!.bounds;
             if (transformAction === 'tl') scalePivot = bounds.bottomRight;
             if (transformAction === 'tr') scalePivot = bounds.bottomLeft;
@@ -390,15 +446,23 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
             if (transformAction === 'br') scalePivot = bounds.topLeft;
             return;
           }
-          if (hitResult.item.parent && hitResult.item.parent.data?.isTransformBox) {
+          if (hitFull.item.parent && hitFull.item.parent.data?.isTransformBox) {
             transformAction = 'move';
             return;
           }
         }
 
+        const hitResult =
+          mode === 'select' && event.modifiers.alt ? referenceLayer.hitTest(event.point, hitOptions) : hitFull;
+
         if (hitResult && hitResult.item !== hoverIndicator) {
-          let group = hitResult.item.parent as paper.Group;
-          if (!group || !group.data?.isStroke) group = hitResult.item as paper.Group;
+          const item = hitResult.item;
+          let group: paper.Group | null = null;
+          if (item instanceof paper.Group && (item.data?.isStroke || item.data?.isReference)) {
+            group = item;
+          } else if (item.parent instanceof paper.Group && (item.parent.data?.isStroke || item.parent.data?.isReference)) {
+            group = item.parent as paper.Group;
+          }
 
           if (group && group.data && group.data.isStroke) {
             let removeNodeOnEditDoubleClick = false;
@@ -464,6 +528,18 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
                   editsMade = true;
                 }
               }
+            }
+          } else if (group && group.data?.isReference) {
+            if (mode === 'select') {
+              if (activeSelectionRef.current !== group) {
+                clearPaperSelection();
+                activeSelectionRef.current = group;
+              }
+              drawTransformBox(group);
+              transformAction = 'move';
+              bumpSelectionRevision();
+            } else {
+              clearPaperSelection();
             }
           }
         } else {
@@ -693,6 +769,8 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
     return () => {
       delete (window as any).getActiveStrokeGroup;
+      delete (window as any).addReferenceImageFromUrl;
+      delete (window as any).selectReferenceGroupById;
       if (canvasRef.current) {
         canvasRef.current.removeEventListener('wheel', handleWheel);
       }
