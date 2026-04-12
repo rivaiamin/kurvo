@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Code, Download, Eraser, Focus, Maximize2, MousePointer2, Move, Palette, PenTool, Play, Redo, Square, Trash2, Undo } from 'lucide-react';
+import paper from 'paper';
 import React from 'react';
 import { useEditor } from '../context/EditorContext';
 import type { ToolMode } from '../types';
@@ -18,7 +19,7 @@ export function Toolbar() {
     const color = e.target.value;
     setCurrentColor(color);
     if (!projectRef.current) return;
-    const paperColor = new projectRef.current.paper.Color(color);
+    const paperColor = new paper.Color(color);
     const groups = new Set<paper.Group>();
     projectRef.current.getItems({ name: 'skeleton', selected: true }).forEach((skel) => {
       if (skel.parent?.data?.isStroke) groups.add(skel.parent as paper.Group);
