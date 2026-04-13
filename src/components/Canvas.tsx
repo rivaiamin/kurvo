@@ -9,11 +9,12 @@ export function Canvas() {
   usePaperEngine(canvasRef);
 
   return (
-    <div className="flex-1 bg-white relative overflow-hidden">
+    <div className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
       <canvas
           ref={canvasRef}
-          className={`w-full h-full touch-none outline-none transition-opacity duration-300 ${activeTool === 'select' ? 'cursor-default' : 'cursor-crosshair'} ${isAnimating ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          className={`block w-full h-full touch-none outline-none transition-opacity duration-300 ${activeTool === 'select' ? 'cursor-default' : 'cursor-crosshair'} ${isAnimating ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           data-paper-resize="true"
+          style={{ width: '100%', height: '100%' }}
       />
 
       {isAnimating && (

@@ -114,6 +114,21 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
     paper.setup(canvasRef.current);
     projectRef.current = paper.project;
+
+    const syncViewSize = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !paper.view) return;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (w > 0 && h > 0) {
+        paper.view.viewSize = new paper.Size(w, h);
+      }
+    };
+    syncViewSize();
+    const resizeObserver = new ResizeObserver(() => {
+      syncViewSize();
+    });
+    resizeObserver.observe(canvasRef.current);
     const drawLayer = paper.project.activeLayer;
     const referenceLayer = new paper.Layer({ name: '__reference' });
     referenceLayer.sendToBack();
@@ -768,6 +783,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
     canvasRef.current.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
+      resizeObserver.disconnect();
       delete (window as any).getActiveStrokeGroup;
       delete (window as any).addReferenceImageFromUrl;
       delete (window as any).selectReferenceGroupById;

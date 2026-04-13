@@ -212,8 +212,8 @@ export function Toolbar({ children }: ToolbarProps) {
     }`;
 
   return (
-    <>
-      <header className="relative z-20 flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2.5 shadow-sm md:px-4 pt-[max(0.625rem,env(safe-area-inset-top,0px))]">
+    <div className="grid min-h-0 w-full flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <header className="relative z-20 flex min-h-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2.5 shadow-sm md:px-4 pt-[max(0.625rem,env(safe-area-inset-top,0px))]">
         <div className="min-w-0 shrink">
           <span className="text-lg font-bold tracking-tight text-slate-900 md:text-xl">
             Kurvo
@@ -257,11 +257,34 @@ export function Toolbar({ children }: ToolbarProps) {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+      {/* Mobile tool mode dock (vertical, right side). Keeps bottom bar compact. */}
+      <div
+        className={`md:hidden fixed right-0 z-40 flex w-fit flex-col gap-1 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5
+          mr-3 bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] mb-2 ${isAnimating ? 'opacity-50 pointer-events-none' : ''}`}
+        aria-label="Tool mode"
+      >
+        <button onClick={() => switchTool('draw')} className={toolBtn(activeTool === 'draw')} title="Draw (Z)" aria-label="Draw">
+          <PenTool size={16} />
+        </button>
+        <button onClick={() => switchTool('select')} className={toolBtn(activeTool === 'select')} title="Select Box (X)" aria-label="Select box">
+          <MousePointer2 size={16} />
+        </button>
+        <button onClick={() => switchTool('edit')} className={toolBtn(activeTool === 'edit')} title="Edit Nodes (C)" aria-label="Edit nodes">
+          <Move size={16} />
+        </button>
+        <button onClick={() => switchTool('pressure')} className={toolBtn(activeTool === 'pressure')} title="Pressure (V)" aria-label="Pressure">
+          <Maximize2 size={16} />
+        </button>
+        <button onClick={() => switchTool('eraser')} className={toolBtn(activeTool === 'eraser')} title="Boolean Eraser (E)" aria-label="Eraser">
+          <Eraser size={16} />
+        </button>
+      </div>
 
-      <div className="relative z-10 flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-white p-2 shadow-[0_-4px_6px_-1px_rgb(0_0_0_/_0.06)] md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-0 md:p-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
-      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] md:gap-4 md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden">
-        <div className={`flex shrink-0 gap-0.5 rounded-md border bg-slate-100 p-1 ${isAnimating ? 'pointer-events-none opacity-50' : ''}`}>
+      <div className="relative min-h-0 min-w-0 overflow-hidden">{children}</div>
+
+      <div className="relative z-10 flex min-h-0 shrink-0 items-center border-t border-slate-200 bg-white p-2 shadow-[0_-4px_6px_-1px_rgb(0_0_0_/_0.06)] md:flex-row md:flex-wrap md:justify-between md:p-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] md:flex-none md:gap-4 md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden">
+        <div className={`hidden md:flex shrink-0 gap-0.5 rounded-md border bg-slate-100 p-1 ${isAnimating ? 'pointer-events-none opacity-50' : ''}`}>
           <button onClick={() => switchTool('draw')} className={toolBtn(activeTool === 'draw')} title="Draw (Z)">
             <PenTool size={16} /> <span className="hidden md:inline">Draw</span>
           </button>
@@ -344,6 +367,6 @@ export function Toolbar({ children }: ToolbarProps) {
         )}
       </div>
       </div>
-    </>
+    </div>
   );
 }
