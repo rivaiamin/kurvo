@@ -1,11 +1,21 @@
 // @ts-nocheck
-import { ChevronDown, ChevronUp, Eye, EyeOff, Layers, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, Layers, Plus, Trash2, X } from 'lucide-react';
 import paper from 'paper';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useEditor } from '../context/EditorContext';
 
 export function LayerPanel() {
   const { projectRef, projectRevision, bumpProjectRevision, isAnimating, saveHistory } = useEditor();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileOpen]);
 
   const project = projectRef.current;
   const layers = (project?.layers ?? []).filter((l) => l.name !== '__ui' && l.name !== '__reference');
@@ -88,22 +98,31 @@ export function LayerPanel() {
     bumpProjectRevision();
   };
 
-  return (
-    <div
-      className={`flex flex-col w-52 shrink-0 border-r border-slate-200 bg-slate-50 ${isAnimating ? 'opacity-50 pointer-events-none' : ''}`}
-    >
-      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-white">
-        <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-          <Layers size={14} /> Layers
+  const panelBody = (
+    <>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-white gap-2">
+        <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 min-w-0">
+          <Layers size={14} className="shrink-0" /> <span className="truncate">Layers</span>
         </span>
-        <button
-          type="button"
-          onClick={addLayer}
-          className="p-1 rounded hover:bg-slate-100 text-slate-600"
-          title="New layer"
-        >
-          <Plus size={16} />
-        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={addLayer}
+            className="p-1 rounded hover:bg-slate-100 text-slate-600"
+            title="New layer"
+          >
+            <Plus size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="md:hidden p-1 rounded hover:bg-slate-100 text-slate-600"
+            title="Close layers"
+            aria-label="Close layers"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
       {referenceGroups.length > 0 && (
         <div className="px-2 pt-2 pb-1 border-b border-slate-200">
@@ -204,6 +223,43 @@ export function LayerPanel() {
       <span className="hidden" aria-hidden>
         {projectRevision}
       </span>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        className={`md:hidden fixed left-4 z-30 h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-lg ring-1 ring-black/5 active:scale-95 transition-transform max-md:top-[calc(env(safe-area-inset-top,0px)+3.75rem)] ${mobileOpen ? 'max-md:hidden' : 'flex'} ${isAnimating ? 'opacity-50 pointer-events-none' : ''}`}
+        title="Layers"
+        aria-label="Open layers"
+        aria-expanded={mobileOpen}
+      >
+        <Layers size={22} />
+      </button>
+
+      {mobileOpen && (
+        <button
+          type="button"
+          className="md:hidden fixed inset-0 z-40 bg-slate-900/40"
+          aria-label="Dismiss layers"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <div
+        className={`flex flex-col shrink-0 h-full min-h-0 w-0 md:w-52 overflow-visible border-0 md:border-r border-slate-200 bg-slate-50 ${isAnimating ? 'opacity-50 pointer-events-none' : ''}`}
+      >
+        <div
+          className={`flex flex-col h-full min-h-0 w-[min(100vw-2rem,18rem)] md:w-full border-r md:border-0 border-slate-200 bg-slate-50 shadow-xl md:shadow-none
+            md:relative md:translate-x-0
+            max-md:fixed max-md:top-0 max-md:bottom-0 max-md:left-0 max-md:z-50 max-md:transition-transform max-md:duration-200 ease-out
+            ${mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}`}
+        >
+          {panelBody}
+        </div>
+      </div>
+    </>
   );
 }
