@@ -1,4 +1,4 @@
-export type ToolMode = 'draw' | 'select' | 'edit' | 'pressure' | 'eraser';
+export type ToolMode = 'draw' | 'freestyle' | 'select' | 'edit' | 'pressure' | 'eraser';
 
 export interface PathData {
   id: number;

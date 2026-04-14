@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Code, Download, Eraser, Focus, ImagePlus, Maximize2, MousePointer2, Move, Palette, PenTool, Play, Redo, Square, Trash2, Undo } from 'lucide-react';
+import { Code, Download, Eraser, Focus, ImagePlus, Maximize2, MousePointer2, Move, Palette, PenTool, Pencil, Play, Redo, Square, Trash2, Undo } from 'lucide-react';
 import paper from 'paper';
 import React, { useEffect, useRef, useState } from 'react';
 import { useEditor } from '../context/EditorContext';
@@ -266,6 +266,9 @@ export function Toolbar({ children }: ToolbarProps) {
         <button onClick={() => switchTool('draw')} className={toolBtn(activeTool === 'draw')} title="Draw (Z)" aria-label="Draw">
           <PenTool size={16} />
         </button>
+        <button onClick={() => switchTool('freestyle')} className={toolBtn(activeTool === 'freestyle')} title="Freestyle pen (P)" aria-label="Freestyle pen">
+          <Pencil size={16} />
+        </button>
         <button onClick={() => switchTool('select')} className={toolBtn(activeTool === 'select')} title="Select Box (X)" aria-label="Select box">
           <MousePointer2 size={16} />
         </button>
@@ -287,6 +290,9 @@ export function Toolbar({ children }: ToolbarProps) {
         <div className={`hidden md:flex shrink-0 gap-0.5 rounded-md border bg-slate-100 p-1 ${isAnimating ? 'pointer-events-none opacity-50' : ''}`}>
           <button onClick={() => switchTool('draw')} className={toolBtn(activeTool === 'draw')} title="Draw (Z)">
             <PenTool size={16} /> <span className="hidden md:inline">Draw</span>
+          </button>
+          <button onClick={() => switchTool('freestyle')} className={toolBtn(activeTool === 'freestyle')} title="Freestyle pen (P)">
+            <Pencil size={16} /> <span className="hidden md:inline">Freestyle</span>
           </button>
           <button onClick={() => switchTool('select')} className={toolBtn(activeTool === 'select')} title="Select Box (X)">
             <MousePointer2 size={16} /> <span className="hidden md:inline">Select Box</span>

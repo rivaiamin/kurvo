@@ -127,6 +127,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       if (!e.ctrlKey && !e.metaKey) {
         switch (e.key.toLowerCase()) {
           case 'z': setActiveTool('draw'); break;
+          case 'p': setActiveTool('freestyle'); break;
           case 'x': setActiveTool('select'); break;
           case 'c': setActiveTool('edit'); break;
           case 'v': setActiveTool('pressure'); break;

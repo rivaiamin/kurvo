@@ -183,6 +183,9 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
     const currentGroupRef = { current: null as paper.Group | null };
     const activeSelectionRef = { current: null as paper.Group | null };
 
+    const freestyleGroupRef = { current: null as paper.Group | null };
+    let lastFreestylePoint: paper.Point | null = null;
+
     let hoverIndicator = new paper.Path.Circle({
       center: [-1000, -1000],
       radius: 6,
@@ -381,6 +384,36 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         return;
       }
 
+      if (mode === 'freestyle') {
+        // Freestyle uses the SAME stroke tech as `draw` (skeleton+ribbon), just sampled continuously.
+        clearPaperSelection();
+        currentGroupRef.current = null; // don't accidentally continue a click-to-add draw stroke
+
+        const group = new paper.Group({ data: { isStroke: true } });
+        const skeleton = new paper.Path({ name: 'skeleton', strokeColor: '#000000', opacity: 0.01, selected: true });
+        skeleton.data = { baseWidth: brushSize };
+
+        const ribbon = new paper.Path({ name: 'ribbon', fillColor: color, closed: true });
+        const capStart = new paper.Path.Circle({ center: [0, 0], radius: 1, fillColor: color, name: 'capStart', applyMatrix: false });
+        const capEnd = new paper.Path.Circle({ center: [0, 0], radius: 1, fillColor: color, name: 'capEnd', applyMatrix: false });
+
+        group.addChildren([ribbon, capStart, capEnd, skeleton]);
+        activeSelectionRef.current = group;
+        freestyleGroupRef.current = group;
+
+        skeleton.add(event.point);
+        if (skeleton.lastSegment) {
+          skeleton.lastSegment.data = skeleton.lastSegment.data || {};
+          skeleton.lastSegment.data.pressure = 1;
+        }
+        lastFreestylePoint = event.point.clone();
+        smoothSkeleton(skeleton);
+        updateRibbon(group);
+        editsMade = true;
+        bringUiToFront();
+        return;
+      }
+
       let isDrawDoubleClick = false;
       if (mode === 'draw') {
         const now = Date.now();
@@ -473,9 +506,9 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         if (hitResult && hitResult.item !== hoverIndicator) {
           const item = hitResult.item;
           let group: paper.Group | null = null;
-          if (item instanceof paper.Group && (item.data?.isStroke || item.data?.isReference)) {
+          if (item instanceof paper.Group && (item.data?.isStroke || item.data?.isReference || item.data?.isFreestyle)) {
             group = item;
-          } else if (item.parent instanceof paper.Group && (item.parent.data?.isStroke || item.parent.data?.isReference)) {
+          } else if (item.parent instanceof paper.Group && (item.parent.data?.isStroke || item.parent.data?.isReference || item.parent.data?.isFreestyle)) {
             group = item.parent as paper.Group;
           }
 
@@ -638,6 +671,27 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         return;
       }
 
+      if (mode === 'freestyle' && freestyleGroupRef.current) {
+        const group = freestyleGroupRef.current;
+        const skel = group.children['skeleton'] as paper.Path;
+        if (!skel) return;
+
+        // Sample at a small screen-constant spacing so strokes feel smooth at any zoom level.
+        const spacing = 2.2 / paper.view.zoom;
+        if (lastFreestylePoint && event.point.getDistance(lastFreestylePoint) < spacing) return;
+        lastFreestylePoint = event.point.clone();
+
+        skel.add(event.point);
+        if (skel.lastSegment) {
+          skel.lastSegment.data = skel.lastSegment.data || {};
+          skel.lastSegment.data.pressure = 1;
+        }
+        smoothSkeleton(skel);
+        updateRibbon(group);
+        editsMade = true;
+        return;
+      }
+
       if (mode === 'edit' && draggedSegment) {
         draggedSegment.point = draggedSegment.point.add(event.delta);
         smoothSkeleton(draggedSegment.path as paper.Path);
@@ -734,6 +788,11 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
       draggedSegment = null;
       transformAction = null;
+
+      if (mode === 'freestyle') {
+        freestyleGroupRef.current = null;
+        lastFreestylePoint = null;
+      }
 
       if (editsMade) {
         saveHistory();
