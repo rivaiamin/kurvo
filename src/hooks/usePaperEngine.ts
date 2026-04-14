@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { useEffect, useRef } from 'react';
 import paper from 'paper';
+import { useEffect, useRef } from 'react';
 import { useEditor } from '../context/EditorContext';
 
 const CATMULL_FACTOR = 0.5;
@@ -185,6 +185,16 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
     const freestyleGroupRef = { current: null as paper.Group | null };
     let lastFreestylePoint: paper.Point | null = null;
+    let freestyleLen = 0;
+    let freestyleWave = {
+      base: 1,
+      amp1: 0.25,
+      amp2: 0.06,
+      w1: 0.06,
+      w2: 0.02,
+      p1: 0,
+      p2: 0
+    };
 
     let hoverIndicator = new paper.Path.Circle({
       center: [-1000, -1000],
@@ -404,9 +414,22 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
         skeleton.add(event.point);
         if (skeleton.lastSegment) {
           skeleton.lastSegment.data = skeleton.lastSegment.data || {};
+          // Emulated pressure: smooth long-wave so nearby nodes stay similar.
           skeleton.lastSegment.data.pressure = 1;
         }
         lastFreestylePoint = event.point.clone();
+        freestyleLen = 0;
+        // Randomize the "feel" per stroke, but keep it smooth within the stroke.
+        freestyleWave = {
+          base: 1,
+          amp1: 0.22 + Math.random() * 0.18,
+          amp2: 0.06 + Math.random() * 0.14,
+          // angular frequency per project-unit distance (scaled by zoom sampling later)
+          w1: 0.055 + Math.random() * 0.04,
+          w2: 0.032 + Math.random() * 0.02,
+          p1: Math.random() * Math.PI * 2,
+          p2: Math.random() * Math.PI * 2
+        };
         smoothSkeleton(skeleton);
         updateRibbon(group);
         editsMade = true;
@@ -678,13 +701,20 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
         // Sample at a small screen-constant spacing so strokes feel smooth at any zoom level.
         const spacing = 2.2 / paper.view.zoom;
-        if (lastFreestylePoint && event.point.getDistance(lastFreestylePoint) < spacing) return;
+        const segDist = lastFreestylePoint ? event.point.getDistance(lastFreestylePoint) : 0;
+        if (lastFreestylePoint && segDist < spacing) return;
+        if (segDist > 0) freestyleLen += segDist;
         lastFreestylePoint = event.point.clone();
 
         skel.add(event.point);
         if (skel.lastSegment) {
           skel.lastSegment.data = skel.lastSegment.data || {};
-          skel.lastSegment.data.pressure = 1;
+          const wave =
+            freestyleWave.base +
+            Math.sin(freestyleWave.p1 + freestyleLen * freestyleWave.w1) * freestyleWave.amp1 +
+            Math.sin(freestyleWave.p2 + freestyleLen * freestyleWave.w2) * freestyleWave.amp2;
+          // Keep pressure in a reasonable band for editing; avoid going to ~0.
+          skel.lastSegment.data.pressure = Math.max(0.15, Math.min(1.85, wave));
         }
         smoothSkeleton(skel);
         updateRibbon(group);
@@ -792,6 +822,7 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
       if (mode === 'freestyle') {
         freestyleGroupRef.current = null;
         lastFreestylePoint = null;
+        freestyleLen = 0;
       }
 
       if (editsMade) {
