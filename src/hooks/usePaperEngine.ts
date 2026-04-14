@@ -841,6 +841,119 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
     canvasRef.current.addEventListener('wheel', handleWheel, { passive: false });
 
+    // Mobile: two-finger pan + pinch-to-zoom (single finger remains for drawing/editing).
+    const activePointers = new Map<number, { clientX: number; clientY: number }>();
+    let gestureActive = false;
+    let gestureStartZoom = 1;
+    let gestureStartCenter: paper.Point | null = null;
+    let gestureStartDist = 1;
+    let gestureAnchorProject: paper.Point | null = null;
+
+    const getCanvasPoint = (clientX: number, clientY: number) => {
+      const rect = canvasRef.current!.getBoundingClientRect();
+      return new paper.Point(clientX - rect.left, clientY - rect.top);
+    };
+
+    const startTwoFingerGestureIfReady = () => {
+      if (!paper.view) return;
+      if (gestureActive) return;
+      if (activePointers.size !== 2) return;
+
+      const pts = Array.from(activePointers.values());
+      const dx = pts[0].clientX - pts[1].clientX;
+      const dy = pts[0].clientY - pts[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      if (!Number.isFinite(dist) || dist < 4) return;
+
+      const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
+      const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
+
+      const view = paper.view;
+      gestureActive = true;
+      gestureStartZoom = view.zoom;
+      gestureStartCenter = view.center.clone();
+      gestureStartDist = dist;
+      gestureAnchorProject = view.viewToProject(getCanvasPoint(midClientX, midClientY));
+
+      // Prevent creating strokes while panning/zooming with two fingers.
+      tool.enabled = false;
+    };
+
+    const updateTwoFingerGesture = () => {
+      if (!paper.view) return;
+      if (!gestureActive) return;
+      if (activePointers.size !== 2) return;
+      if (!gestureStartCenter || !gestureAnchorProject) return;
+
+      const pts = Array.from(activePointers.values());
+      const dx = pts[0].clientX - pts[1].clientX;
+      const dy = pts[0].clientY - pts[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      if (!Number.isFinite(dist) || dist < 1) return;
+
+      const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
+      const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
+      const midCanvasPt = getCanvasPoint(midClientX, midClientY);
+
+      const view = paper.view;
+      const zoomFactor = dist / gestureStartDist;
+      const targetZoom = Math.max(0.1, Math.min(gestureStartZoom * zoomFactor, 10));
+
+      // Pin the original anchor point under the moving midpoint (supports pan + zoom).
+      view.zoom = targetZoom;
+      view.center = gestureStartCenter.clone();
+      const midProjectWithNewZoom = view.viewToProject(midCanvasPt);
+      view.center = view.center.add(gestureAnchorProject.subtract(midProjectWithNewZoom));
+    };
+
+    const endTwoFingerGestureIfNeeded = () => {
+      if (activePointers.size >= 2) return;
+      if (!gestureActive) return;
+      gestureActive = false;
+      gestureStartCenter = null;
+      gestureAnchorProject = null;
+      tool.enabled = true;
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (!canvasRef.current || !paper.view) return;
+      // Only treat touch pointers as gesture candidates.
+      if (e.pointerType !== 'touch') return;
+      activePointers.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+      try {
+        canvasRef.current.setPointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      if (activePointers.size >= 2) {
+        e.preventDefault();
+        startTwoFingerGestureIfReady();
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      if (!activePointers.has(e.pointerId)) return;
+      activePointers.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+      if (activePointers.size >= 2) {
+        e.preventDefault();
+        startTwoFingerGestureIfReady();
+        updateTwoFingerGesture();
+      }
+    };
+
+    const onPointerUpOrCancel = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      activePointers.delete(e.pointerId);
+      if (gestureActive) e.preventDefault();
+      endTwoFingerGestureIfNeeded();
+    };
+
+    canvasRef.current.addEventListener('pointerdown', onPointerDown, { passive: false });
+    canvasRef.current.addEventListener('pointermove', onPointerMove, { passive: false });
+    canvasRef.current.addEventListener('pointerup', onPointerUpOrCancel, { passive: false });
+    canvasRef.current.addEventListener('pointercancel', onPointerUpOrCancel, { passive: false });
+
     return () => {
       resizeObserver.disconnect();
       delete (window as any).getActiveStrokeGroup;
@@ -848,6 +961,10 @@ export function usePaperEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
       delete (window as any).selectReferenceGroupById;
       if (canvasRef.current) {
         canvasRef.current.removeEventListener('wheel', handleWheel);
+        canvasRef.current.removeEventListener('pointerdown', onPointerDown);
+        canvasRef.current.removeEventListener('pointermove', onPointerMove);
+        canvasRef.current.removeEventListener('pointerup', onPointerUpOrCancel);
+        canvasRef.current.removeEventListener('pointercancel', onPointerUpOrCancel);
       }
       tool.remove();
       if (paper.project) {
