@@ -76,6 +76,18 @@ export function Toolbar({ children }: ToolbarProps) {
     if ((window as any).clearPaperSelection) (window as any).clearPaperSelection();
   };
 
+  const handleClearLayer = () => {
+    if (isAnimating) return;
+    if (!projectRef.current?.activeLayer) return;
+
+    const ok = window.confirm('Clear the current layer? This will remove all items on it.');
+    if (!ok) return;
+
+    projectRef.current.activeLayer.removeChildren();
+    saveHistory();
+    switchTool('draw');
+  };
+
   const handleExportSVG = () => {
     if ((window as any).clearPaperSelection) (window as any).clearPaperSelection();
     if (!projectRef.current) return;
@@ -231,14 +243,6 @@ export function Toolbar({ children }: ToolbarProps) {
             </button>
 
             <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-slate-200 sm:block" />
-
-            <button
-              onClick={() => { if (projectRef.current?.activeLayer) { projectRef.current.activeLayer.removeChildren(); saveHistory(); switchTool('draw'); } }}
-              className={`shrink-0 rounded-md p-2 text-red-500 hover:bg-red-50 ${isAnimating ? 'pointer-events-none opacity-50' : ''}`}
-              title="Clear layer"
-            >
-              <Trash2 size={20} />
-            </button>
             <button
               onClick={handleExportSVG}
               className={`flex shrink-0 items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 md:gap-2 md:px-4 ${isAnimating ? 'pointer-events-none opacity-50' : ''}`}
@@ -312,6 +316,14 @@ export function Toolbar({ children }: ToolbarProps) {
           <button onClick={undo} className={`p-1 transition-colors ${canUndo ? 'text-slate-700 hover:text-indigo-600' : 'pointer-events-none text-slate-300'}`} title="Undo (Ctrl+Z)"><Undo size={16} /></button>
           <button onClick={redo} className={`p-1 transition-colors ${canRedo ? 'text-slate-700 hover:text-indigo-600' : 'pointer-events-none text-slate-300'}`} title="Redo (Ctrl+Shift+Z)"><Redo size={16} /></button>
         </div>
+
+        <button
+          onClick={handleClearLayer}
+          className={`flex shrink-0 items-center gap-2 rounded-md border bg-slate-100 p-2 text-sm font-medium text-red-600 transition-all hover:bg-red-50 md:px-3 md:py-1.5 ${isAnimating ? 'pointer-events-none opacity-50' : ''}`}
+          title="Clear layer"
+        >
+          <Trash2 size={16} /> <span className="hidden md:inline">Clear</span>
+        </button>
 
         <div className={`flex shrink-0 items-center gap-1.5 rounded-md border bg-slate-100 px-2 py-1 md:gap-2 md:px-3 ${isAnimating ? 'pointer-events-none opacity-50' : ''}`}>
           <Palette size={16} className="shrink-0 text-slate-500" />
